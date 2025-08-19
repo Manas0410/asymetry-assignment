@@ -20,6 +20,9 @@ const authOptions = {
 
   session: { strategy: "database" as SessionStrategy },
   secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: "/login",
+  },
 };
 
 const handler = NextAuth(authOptions);
