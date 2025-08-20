@@ -1,90 +1,123 @@
+// @ts-nocheck
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { WeatherCard, F1Card, StockCard } from "@/components/tool-card";
 
-interface Message {
-  sender: "user" | "ai";
-  text: string;
-}
-
-const initialMessages: Message[] = [
-  { sender: "ai", text: "Hello! How can I help you today?" },
-];
-
-const Page = () => {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+export default function ChatPage() {
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const { messages, sendMessage, status, error } = useChat({
+    api: "/api/ai",
+  });
 
-  const handleSend = () => {
+  const isLoading = status === "submitted" || status === "streaming";
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!input.trim()) return;
-    setMessages((msgs) => [
-      ...msgs,
-      { sender: "user", text: input },
-      { sender: "ai", text: "(AI reply placeholder)" },
-    ]);
+    sendMessage({ text: input });
     setInput("");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") handleSend();
-  };
-
   return (
-    <div className="flex items-center justify-center min-h-screen bg-muted">
-      <Card className="w-full max-w-7xl h-[85vh] flex flex-col">
-        <CardHeader>
-          <CardTitle className="text-center">Chat</CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto space-y-4 px-8">
-          <div className="flex flex-col gap-2 h-full">
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${
-                  msg.sender === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`rounded-lg px-4 py-2 max-w-[70%] text-sm shadow-sm ${
-                    msg.sender === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground"
-                  }`}
-                >
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
+    <div className="mx-auto flex min-h-[100dvh] max-w-3xl flex-col p-4">
+      <h1 className="mb-4 text-2xl font-bold">AI Assistant</h1>
+
+      <div className="flex-1 space-y-4 overflow-y-auto rounded-2xl border p-4">
+        {messages.map((m) => (
+          <div key={m.id} className="space-y-2">
+            <div
+              className={m.role === "user" ? "text-blue-600" : "text-gray-900"}
+            >
+              <strong>{m.role === "user" ? "You" : "Assistant"}:</strong>{" "}
+              {/* render text parts */}
+              {m.parts?.map((part: any, i: number) => {
+                if (part.type === "text")
+                  return <span key={i}>{part.text}</span>;
+                return null;
+              })}
+            </div>
+
+            {/* render tool UI parts */}
+            <div className="space-y-2">
+              {m.parts?.map((part: any, i: number) => {
+                // Weather
+                if (part.type === "tool-getWeather") {
+                  if (part.state === "input-available") {
+                    return <div key={i}>Fetching weather…</div>;
+                  }
+                  if (part.state === "output-available") {
+                    return <WeatherCard key={i} {...part.output} />;
+                  }
+                  if (part.state === "output-error") {
+                    return (
+                      <div key={i} className="text-red-600">
+                        Weather error: {part.errorText}
+                      </div>
+                    );
+                  }
+                }
+
+                // F1
+                if (part.type === "tool-getF1Matches") {
+                  if (part.state === "input-available") {
+                    return <div key={i}>Fetching next F1 race…</div>;
+                  }
+                  if (part.state === "output-available") {
+                    return <F1Card key={i} {...part.output} />;
+                  }
+                  if (part.state === "output-error") {
+                    return (
+                      <div key={i} className="text-red-600">
+                        F1 error: {part.errorText}
+                      </div>
+                    );
+                  }
+                }
+
+                // Stock
+                if (part.type === "tool-getStockPrice") {
+                  if (part.state === "input-available") {
+                    return <div key={i}>Fetching stock price…</div>;
+                  }
+                  if (part.state === "output-available") {
+                    return <StockCard key={i} {...part.output} />;
+                  }
+                  if (part.state === "output-error") {
+                    return (
+                      <div key={i} className="text-red-600">
+                        Stock error: {part.errorText}
+                      </div>
+                    );
+                  }
+                }
+
+                return null;
+              })}
+            </div>
           </div>
-        </CardContent>
-        <form
-          className="flex gap-2 p-4 border-t bg-background"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
+        ))}
+
+        {error && <div className="text-red-600">Error: {error.message}</div>}
+      </div>
+
+      <form onSubmit={onSubmit} className="mt-4 flex gap-2">
+        <input
+          className="flex-1 rounded-xl border p-3 outline-none"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask about weather (city), next F1 race, or stock price (e.g., AAPL)"
+        />
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="rounded-xl bg-black px-4 py-3 text-white disabled:opacity-50"
         >
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your message..."
-            autoFocus
-          />
-          <Button type="submit">Send</Button>
-        </form>
-      </Card>
+          {isLoading ? "..." : "Send"}
+        </button>
+      </form>
     </div>
   );
-};
-
-export default Page;
+}
